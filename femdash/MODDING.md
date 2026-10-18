@@ -14,7 +14,6 @@ Start with this header, then call `FemDash.mod` once:
 // @version 1.0.0
 // @author you
 // @description What it does, in one line.
-// @icon ✨                (optional: an emoji or 1-2 letters shown on your mod's card)
 // ==/FemDashMod==
 
 FemDash.mod(function (api) {

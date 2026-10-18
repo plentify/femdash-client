@@ -1,4 +1,3 @@
-// Keeps upstream files untouched: everything hooks in from here.
 (function () {
   const PAL = {
     pink: 0xff8fc8, lavender: 0xb79cff, blue: 0x8edbff, plum: 0x3b1e5a,

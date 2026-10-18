@@ -1,4 +1,3 @@
-// mod loader
 (function () {
   "use strict";
   const FD = window.FemDash;
@@ -13,7 +12,7 @@
   const status = {}; // id -> { state, error }
   let dirty = false; // changes that need a reload
 
-  // header parsing / install 
+  // header parsing / install
   function parseHeader(code) {
     const m = code.match(/\/\/\s*==FemDashMod==([\s\S]*?)\/\/\s*==\/FemDashMod==/);
     if (!m) return null;
@@ -25,8 +24,9 @@
     const meta = parseHeader(code);
     if (!meta || !ID_RE.test(meta.id || "")) throw new Error("The mod needs a header with a valid @id (lowercase letters, numbers, - or _). See MODDING.md.");
     if (code.length > 300000) throw new Error("Mod is too large (300 KB max).");
-    const entry = Object.assign({ id: meta.id, name: meta.name || meta.id, version: meta.version || "?", author: meta.author || "unknown", description: meta.description || "", icon: (meta.icon || "").slice(0, 4), enabled: true, source, code }, extra || {});
+    const entry = Object.assign({ id: meta.id, name: meta.name || meta.id, version: meta.version || "?", author: meta.author || "unknown", description: meta.description || "", icon: (meta.icon || "").slice(0, 4), enabled: true, source, code, added: Date.now() }, extra || {});
     const i = mods.findIndex(x => x.id === entry.id);
+    if (i >= 0 && mods[i].added) entry.added = mods[i].added;
     if (i >= 0) mods[i] = entry; else mods.push(entry);
     save(); dirty = true;
     return entry;
@@ -103,80 +103,59 @@
   });
   FD.mods = { list: () => mods.map(m => ({ id: m.id, name: m.name, version: m.version, enabled: m.enabled !== false, state: (status[m.id] || {}).state })) };
 
-  // mod manager UI
+  // mod manager UI 
   const css = document.createElement("style");
   css.textContent = `
-  #fd-mm-ov{position:fixed;inset:0;z-index:10000;background:rgba(10,4,20,.62);display:none;align-items:center;justify-content:center}
-  #fd-mm{display:flex;flex-direction:column;width:540px;max-width:94vw;max-height:88vh;box-sizing:border-box;overflow:hidden;background:#3b1e5a;border:3px solid #1c0f33;border-radius:16px;box-shadow:5px 6px 0 #1c0f33;color:#fff;font:600 13px system-ui,-apple-system,"Segoe UI",sans-serif}
-  #fd-mm .mh{display:flex;align-items:center;padding:9px 10px 9px 16px;background:#ff8fc8;color:#3b1e5a;border-bottom:3px solid #1c0f33}
-  #fd-mm .mh .ttl{flex:1;font:800 20px system-ui,sans-serif}
-  #fd-mm .mx{width:28px;height:28px;padding:0;border-radius:8px;border:2px solid #1c0f33;background:#3b1e5a;color:#fff;font:800 13px system-ui,sans-serif;cursor:pointer}
-  #fd-mm .mx:hover{background:#5b3d80}
-  #fd-mm .mt{display:flex;gap:6px;padding:10px 12px 0}
-  #fd-mm .tab{padding:7px 14px;border-radius:10px;border:2px solid #1c0f33;background:#4a2a70;color:#d9b8ff;font:800 12px system-ui,sans-serif;cursor:pointer}
-  #fd-mm .tab:hover{background:#5b3d80}
-  #fd-mm .tab.on{background:#ff8fc8;color:#3b1e5a}
-  #fd-mm .mb{flex:1;min-height:0;overflow-y:auto;padding:12px}
-  #fd-mm .mb::-webkit-scrollbar{width:8px}#fd-mm .mb::-webkit-scrollbar-thumb{background:#7d5aa6;border-radius:4px}
-  #fd-mm .mr{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:3px solid #1c0f33;background:#331a4f}
-  #fd-mm .mr span{flex:1;color:#ffe2b8}
-  #fd-mm .btn{padding:7px 13px;border-radius:9px;border:2px solid #1c0f33;background:#5b3d80;color:#fff;font:800 12px system-ui,sans-serif;cursor:pointer}
-  #fd-mm .btn:hover,.fd-dl .btn:hover{filter:brightness(1.15)}
-  #fd-mm .btn:disabled{opacity:.5;cursor:default}
-  #fd-mm .btn.pri,.fd-dl .btn.pri{background:#ff8fc8;color:#3b1e5a}
-  #fd-mm .btn.dng,.fd-dl .btn.dng{background:#ff7a8a;color:#3b1e5a}
-  #fd-mm .srch,#fd-mm textarea,#fd-mm input[type=text]{width:100%;box-sizing:border-box;border-radius:10px;border:2px solid #1c0f33;background:#2a1240;color:#fff;padding:9px 11px;font:600 13px system-ui,sans-serif;outline:none}
+  #fd-mm-ov{position:fixed;inset:0;z-index:10000;background:rgba(10,10,14,.55);display:none;align-items:center;justify-content:center}
+  #fd-mm{position:relative;display:flex;flex-direction:column;width:580px;max-width:94vw;height:430px;max-height:88vh;box-sizing:border-box;overflow:hidden;background:#1d1d21;border:1px solid #3b3b44;border-radius:5px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  #fd-mm .wrap{display:flex;flex:1;min-height:0}
+  #fd-mm .side{width:118px;flex:none;padding:6px 0;background:#202025;border-right:1px solid #33333b}
+  #fd-mm .mb{flex:1;min-width:0;overflow-y:auto}
+  #fd-mm .pad{padding:12px}
+  #fd-mm table{border-collapse:collapse;width:100%}
+  #fd-mm th{font-weight:400;text-align:left;color:#80808c;font-size:11px;padding:6px 10px;border-bottom:1px solid #33333b;position:sticky;top:0;background:#1d1d21}
+  #fd-mm td{padding:7px 10px;border-bottom:1px solid #2a2a31;cursor:default}
+  #fd-mm tr.row{cursor:pointer}
+  #fd-mm tr.row:hover td{background:#23232a}
+  #fd-mm tr.sel td{background:#2a2a32}
+  #fd-mm tr.sel td:first-child{box-shadow:inset 2px 0 0 #ff8fc8}
+  #fd-mm .ok{color:#7fd6a4}#fd-mm .bad{color:#ff7a8a}#fd-mm .mut{color:#80808c}#fd-mm .dim{opacity:.55}
+  #fd-mm .det{margin:12px;padding:10px 12px;border:1px solid #33333b;border-radius:4px;background:#18181c;color:#b6b6c2;line-height:1.55}
+  #fd-mm .det b{color:#fff}
+  #fd-mm code{font:11px "Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace}
+  #fd-mm .acts{display:flex;gap:6px;margin-top:8px}
+  #fd-mm .btn,.fd-dl .btn{padding:4px 12px;border:1px solid #4a4a54;border-radius:3px;background:#26262c;color:#d6d6de;font:inherit;cursor:pointer}
+  #fd-mm .btn:hover,.fd-dl .btn:hover{background:#30303a;color:#fff}
+  #fd-mm .btn:disabled{opacity:.45;cursor:default}
+  #fd-mm .btn.pri,.fd-dl .btn.pri{background:#ff8fc8;border-color:#ff8fc8;color:#1d1d21;font-weight:600}
+  #fd-mm .btn.dng,.fd-dl .btn.dng{border-color:#ff7a8a;color:#ff7a8a}
+  #fd-mm .btn.dng:hover{background:#3a2228}
+  #fd-mm .srch,#fd-mm textarea,#fd-mm input[type=text]{width:100%;box-sizing:border-box;border:1px solid #3b3b44;border-radius:3px;background:#16161a;color:#e6e6ee;padding:6px 8px;font:inherit;outline:none}
   #fd-mm .srch:focus,#fd-mm textarea:focus,#fd-mm input[type=text]:focus{border-color:#ff8fc8}
-  #fd-mm .srch{margin-bottom:10px}
-  #fd-mm textarea{height:130px;resize:vertical;font:12px ui-monospace,Consolas,monospace;margin:8px 0}
-  #fd-mm .mc,#fd-mm .mk{position:relative;display:flex;gap:12px;padding:12px;margin-bottom:10px;border-radius:12px;border:2px solid #1c0f33;background:#4a2a70}
-  #fd-mm .ico{flex:none;width:46px;height:46px;border-radius:11px;border:2px solid #1c0f33;background:#ff8fc8;color:#3b1e5a;font:800 21px system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
-  #fd-mm .info{flex:1;min-width:0}
-  #fd-mm .nm{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font:800 15px system-ui,sans-serif}
-  #fd-mm .ver{color:#b79cff;font:700 12px system-ui,sans-serif}
-  #fd-mm .meta{color:#d9b8ff;font-size:12px;margin-top:2px}
-  #fd-mm .desc{color:#efe3ff;font-size:12px;margin-top:5px}
-  #fd-mm .chips{margin-top:7px}
-  #fd-mm .chip,#fd-mm .vb{display:inline-block;padding:2px 9px;border-radius:999px;border:2px solid #1c0f33;font:800 10px system-ui,sans-serif}
-  #fd-mm .chip.ok{background:#8edbff;color:#1c0f33}
-  #fd-mm .chip.off{background:#6b4a93;color:#e9dcff}
-  #fd-mm .chip.err{background:#ff7a8a;color:#1c0f33}
-  #fd-mm .chip.warn{background:#ffc878;color:#1c0f33}
-  #fd-mm .vb{background:#8edbff;color:#1c0f33}
-  #fd-mm .errs{margin-top:8px;padding:7px 9px;border-radius:8px;border:2px solid #1c0f33;background:#5b1f33;color:#ffb3bd;font:11px ui-monospace,Consolas,monospace;word-break:break-word}
-  #fd-mm .side{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:8px}
-  #fd-mm .sw{position:relative;width:42px;height:24px;flex:none;border-radius:12px;border:2px solid #1c0f33;background:#6b4a93;cursor:pointer;transition:background .12s}
-  #fd-mm .sw:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid #1c0f33;transition:left .12s}
-  #fd-mm .sw.on{background:#ff8fc8}#fd-mm .sw.on:after{left:20px}
-  #fd-mm .more{width:30px;height:24px;padding:0;border-radius:8px;border:2px solid #1c0f33;background:#5b3d80;color:#fff;font:800 14px/14px system-ui,sans-serif;cursor:pointer}
-  #fd-mm .more:hover{background:#7d5aa6}
-  #fd-mm .acts{margin-top:9px}
-  #fd-mm .warn{padding:9px 11px;margin-bottom:10px;border-radius:10px;border:2px solid #1c0f33;background:#6a4a1f;color:#ffe2b8;font-size:12px}
-  #fd-mm .note{color:#b79cff;font-size:12px;margin:0 2px 10px}
-  #fd-mm .empty{text-align:center;padding:28px 12px;border-radius:12px;border:3px dashed #7d5aa6;color:#d9b8ff}
-  #fd-mm .empty b{display:block;font:800 17px system-ui,sans-serif;color:#fff;margin-bottom:4px}
-  #fd-mm .ribbon{position:absolute;top:-2px;right:14px;padding:3px 10px;border:2px solid #1c0f33;border-top:0;border-radius:0 0 9px 9px;background:#8edbff;color:#1c0f33;font:800 10px system-ui,sans-serif}
-  #fd-mm .mk .go{align-self:center}
-  #fd-mm .dz{padding:30px 12px;margin-bottom:10px;text-align:center;border-radius:14px;border:3px dashed #b79cff;background:#432463;cursor:pointer}
-  #fd-mm .dz:hover,#fd-mm .dz.hot{background:#573483;border-color:#ff8fc8}
-  #fd-mm .dzi{font-size:26px;line-height:1;color:#ff8fc8}
-  #fd-mm .dzt{font:800 15px system-ui,sans-serif;margin-top:6px}
-  #fd-mm .dzs{color:#b79cff;font-size:12px;margin-top:2px}
-  #fd-mm details{margin-top:12px}
-  #fd-mm summary{cursor:pointer;color:#d9b8ff;font-weight:800}
-  #fd-mm .row2{display:flex;gap:8px;margin-top:8px}
-  .fd-dl-ov{position:fixed;inset:0;z-index:10001;background:rgba(10,4,20,.55);display:flex;align-items:center;justify-content:center}
-  .fd-dl{width:380px;max-width:92vw;box-sizing:border-box;padding:16px;border-radius:14px;border:3px solid #1c0f33;background:#3b1e5a;box-shadow:4px 5px 0 #1c0f33;color:#fff;font:600 13px system-ui,sans-serif}
-  .fd-dl .dt{font:800 17px system-ui,sans-serif;color:#ff8fc8;margin-bottom:8px}
-  .fd-dl .db{white-space:pre-line;color:#efe3ff;line-height:1.45}
-  .fd-dl .da{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-  .fd-dl .btn{padding:7px 14px;border-radius:9px;border:2px solid #1c0f33;background:#5b3d80;color:#fff;font:800 12px system-ui,sans-serif;cursor:pointer}`;
+  #fd-mm .srch{margin:10px 12px 0;width:calc(100% - 24px)}
+  #fd-mm textarea{height:120px;resize:vertical;margin:8px 0;font:11px "Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace}
+  #fd-mm .warn{margin:12px 12px 0;padding:8px 10px;border:1px solid #5a4a2a;border-radius:4px;background:#2a2418;color:#d9c9a0}
+  #fd-mm .empty{padding:28px 14px;color:#80808c}
+  #fd-mm .dz{margin:12px;padding:26px 12px;text-align:center;border:1px dashed #4a4a54;border-radius:4px;color:#9a9aa6;cursor:pointer}
+  #fd-mm .dz:hover,#fd-mm .dz.hot{border-color:#ff8fc8;color:#fff;background:#202026}
+  #fd-mm details{margin:12px}
+  #fd-mm summary{cursor:pointer;color:#9a9aa6}
+  #fd-mm .row2{display:flex;gap:6px;margin-top:6px}
+  #fd-mm .note{color:#80808c;margin:12px 12px 0}
+  #fd-mm .mr{display:flex;align-items:center;gap:10px;flex:none;padding:7px 12px;border-top:1px solid #3b3b44;background:#2a2418;color:#d9c9a0}
+  #fd-mm .mr span{flex:1}
+  .fd-dl-ov{position:fixed;inset:0;z-index:10001;background:rgba(10,10,14,.5);display:flex;align-items:center;justify-content:center}
+  .fd-dl{width:380px;max-width:92vw;box-sizing:border-box;background:#1d1d21;border:1px solid #3b3b44;border-radius:5px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden}
+  .fd-dl .dt{padding:8px 12px;background:#27272d;border-bottom:1px solid #3b3b44;color:#fff;font-weight:600}
+  .fd-dl .db{padding:12px;white-space:pre-line;color:#b6b6c2;line-height:1.5}
+  .fd-dl .da{display:flex;justify-content:flex-end;gap:6px;padding:0 12px 12px}`;
   document.head.appendChild(css);
 
   const h = (tag, props, ...kids) => { const e = document.createElement(tag); if (props) Object.assign(e, props); kids.flat().forEach(k => { if (k != null && k !== false) e.append(k); }); return e; };
   const stop = el => ["keydown", "keyup", "mousedown"].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+  const fmtDate = ts => ts ? new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "\u2014";
 
-  // styled replacements for alert/confirm
+  // replacements for alert/confirm, in the same style
   function dialog(o) {
     return new Promise(res => {
       const ovl = h("div", { className: "fd-dl-ov" }), d = h("div", { className: "fd-dl" }), bar = h("div", { className: "da" });
@@ -194,59 +173,63 @@
   box.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
   stop(box);
   ov.addEventListener("mousedown", e => { if (e.target === ov) close(); });
-  let tab = "installed", market = null, marketErr = "", query = "", draft = null, openCard = null, bodyEl = null, listEl = null;
+  let tab = "installed", market = null, marketErr = "", query = "", draft = null, selected = null, bodyEl = null, listEl = null;
   const mount = () => document.body.appendChild(ov);
   if (document.body) mount(); else window.addEventListener("DOMContentLoaded", mount);
   function close() { ov.style.display = "none"; }
 
   function render() {
     box.textContent = "";
-    const tabs = h("div", { className: "mt" });
-    [["installed", "Installed (" + mods.length + ")"], ["market", "Marketplace"], ["add", "Add mod"]].forEach(([k, l]) => tabs.append(h("button", { className: "tab" + (tab === k ? " on" : ""), textContent: l, onclick: () => { tab = k; render(); } })));
+    const side = h("div", { className: "side" });
+    [["installed", "Installed (" + mods.length + ")"], ["market", "Marketplace"], ["add", "Add"]].forEach(([k, l]) => side.append(h("button", { className: "tab" + (tab === k ? " on" : ""), textContent: l, onclick: () => { tab = k; render(); } })));
     bodyEl = h("div", { className: "mb" });
-    box.append(h("div", { className: "mh" }, h("span", { className: "ttl", textContent: "Mods \u2661" }), h("button", { className: "mx", textContent: "\u2715", title: "Close", onclick: close })), tabs, bodyEl);
+    box.append(h("div", { className: "fd-hd" }, h("span", { className: "ttl", textContent: "Mods" }), h("button", { textContent: "\u2715", title: "Close", onclick: close })), h("div", { className: "wrap" }, side, bodyEl));
     if (safeMode) bodyEl.append(h("div", { className: "warn", textContent: "Safe mode: mods are switched off for this session. Remove ?nomods from the address to run them." }));
     if (tab === "installed") renderInstalled(); else if (tab === "market") renderMarket(); else renderAdd();
     if (dirty) box.append(h("div", { className: "mr" }, h("span", { textContent: "Changes apply after a reload." }), h("button", { className: "btn pri", textContent: "Reload now", onclick: () => location.reload() })));
   }
 
-  function chipFor(m) {
+  function statusOf(m) {
     const s = (status[m.id] || {}).state;
     if (s === "loaded") return ["Running", "ok"];
-    if (s === "error") return ["Error", "err"];
-    if (s === "safe") return ["Safe mode", "warn"];
-    if (s === "off" || m.enabled === false) return ["Disabled", "off"];
-    return dirty ? ["Reload to run", "warn"] : ["Not loaded", "off"];
+    if (s === "error") return ["Error", "bad"];
+    if (s === "safe") return ["Not running (safe mode)", "mut"];
+    if (s === "off" || m.enabled === false) return ["Disabled", "mut"];
+    return dirty ? ["Reload to run", "mut"] : ["Not loaded", "mut"];
   }
-  function card(m) {
-    const st = status[m.id] || {}, chip = chipFor(m);
-    const sw = h("div", { className: "sw" + (m.enabled !== false ? " on" : ""), title: "Enable / disable", onclick: () => { m.enabled = m.enabled === false; save(); dirty = true; render(); } });
-    const more = h("button", { className: "more", textContent: "\u22ef", title: "More", onclick: () => { openCard = openCard === m.id ? null : m.id; renderList(); } });
+  function details(m) {
+    const st = status[m.id] || {}, s = statusOf(m);
+    const enable = h("button", { className: "btn", textContent: m.enabled === false ? "Enable" : "Disable", onclick: () => { m.enabled = m.enabled === false; save(); dirty = true; render(); } });
     const rm = h("button", {
-      className: "btn dng", textContent: "Remove mod", onclick: async () => {
-        if (await dialog({ title: "Remove " + m.name + "?", body: "It will be deleted from this browser. You can add it again later.", ok: "Remove", cancel: "Keep", danger: true })) { mods = mods.filter(x => x !== m); save(); dirty = true; openCard = null; render(); }
+      className: "btn dng", textContent: "Remove", onclick: async () => {
+        if (await dialog({ title: "Remove " + m.name + "?", body: "It will be deleted from this browser. You can add it again later.", ok: "Remove", cancel: "Keep", danger: true })) { mods = mods.filter(x => x !== m); save(); dirty = true; selected = null; render(); }
       }
     });
-    return h("div", { className: "mc" },
-      h("div", { className: "ico", textContent: m.icon || (m.name || "?").trim().charAt(0).toUpperCase() }),
-      h("div", { className: "info" },
-        h("div", { className: "nm" }, h("span", { textContent: m.name }), h("span", { className: "ver", textContent: "v" + m.version }), m.source === "market" ? h("span", { className: "vb", textContent: "\u2713 Verified" }) : null),
-        h("div", { className: "meta", textContent: "by " + m.author + (m.source === "url" ? " \u2022 from a link" : m.source === "local" ? " \u2022 added by you" : "") }),
-        m.description ? h("div", { className: "desc", textContent: m.description }) : null,
-        h("div", { className: "chips" }, h("span", { className: "chip " + chip[1], textContent: chip[0] })),
-        st.error ? h("div", { className: "errs", textContent: st.error }) : null,
-        openCard === m.id ? h("div", { className: "acts" }, rm) : null),
-      h("div", { className: "side" }, sw, more));
+    return h("div", { className: "det" },
+      h("div", null, h("b", { textContent: m.name }), " " + m.version + " by " + m.author, m.source === "market" ? h("span", { className: "ok", textContent: "  (verified)" }) : null),
+      h("div", null, "Status: ", h("span", { className: s[1], textContent: s[0] })),
+      m.description ? h("div", { className: "mut", textContent: m.description }) : null,
+      st.error ? h("div", { className: "bad" }, h("code", { textContent: st.error })) : null,
+      h("div", { className: "acts" }, enable, rm));
   }
   function renderList() {
     listEl.textContent = "";
     const q = query.trim().toLowerCase(), shown = mods.filter(m => !q || (m.name + " " + m.author + " " + m.id).toLowerCase().includes(q));
-    if (!mods.length) listEl.append(h("div", { className: "empty" }, h("b", { textContent: "No mods yet \u2661" }), "Install one from the Marketplace, or add your own in the Add mod tab."));
-    else if (!shown.length) listEl.append(h("div", { className: "note", textContent: "No mods match your search." }));
-    else shown.forEach(m => listEl.append(card(m)));
+    if (!mods.length) { listEl.append(h("div", { className: "empty", textContent: "No mods installed. Use Marketplace or Add." })); return; }
+    if (!shown.length) { listEl.append(h("div", { className: "empty", textContent: "No mods match your search." })); return; }
+    if (!mods.some(m => m.id === selected)) selected = shown[0].id;
+    const tb = h("tbody");
+    shown.forEach(m => {
+      const dim = m.enabled === false ? " dim" : "";
+      tb.append(h("tr", { className: "row" + (m.id === selected ? " sel" : ""), onclick: () => { selected = m.id; renderList(); } },
+        h("td", { className: dim }, m.name, m.source === "market" ? h("span", { className: "ok", textContent: " (verified)" }) : null),
+        h("td", { className: "mut" + dim, textContent: m.version }), h("td", { className: "mut" + dim, textContent: m.author }), h("td", { className: "mut" + dim, textContent: fmtDate(m.added) })));
+    });
+    listEl.append(h("table", null, h("thead", null, h("tr", null, h("th", { textContent: "Name" }), h("th", { textContent: "Version" }), h("th", { textContent: "Author" }), h("th", { textContent: "Date added" }))), tb));
+    const sel = mods.find(m => m.id === selected); if (sel) listEl.append(details(sel));
   }
   function renderInstalled() {
-    if (mods.length > 4) bodyEl.append(h("input", { className: "srch", type: "text", placeholder: "Search mods...", value: query, oninput: e => { query = e.target.value; renderList(); } }));
+    if (mods.length > 4) bodyEl.append(h("input", { className: "srch", type: "text", placeholder: "Search mods", value: query, oninput: e => { query = e.target.value; renderList(); } }));
     listEl = h("div"); bodyEl.append(listEl); renderList();
   }
 
@@ -261,7 +244,7 @@
   async function installFromMarket(item, btn) {
     try {
       if (!(window.crypto && crypto.subtle)) throw new Error("Verifying a mod needs https or localhost.");
-      btn.disabled = true; btn.textContent = "Installing...";
+      btn.disabled = true; btn.textContent = "Installing";
       const r = await fetch("femdash/" + item.file + "?t=" + Date.now()); if (!r.ok) throw new Error("HTTP " + r.status);
       const buf = await r.arrayBuffer();
       if ((await sha256(buf)) !== String(item.sha256 || "").toLowerCase()) throw new Error("The file doesn't match what FemDash verified, so it wasn't installed.");
@@ -271,17 +254,16 @@
   }
   function renderMarket() {
     bodyEl.append(h("div", { className: "note", textContent: "Verified mods are reviewed by the FemDash team and checked against a fingerprint before they install." }));
-    if (market === null) { bodyEl.append(h("div", { className: "note", textContent: "Loading..." })); loadMarket(); return; }
-    if (marketErr) bodyEl.append(h("div", { className: "errs", textContent: marketErr }));
-    if (!market.length && !marketErr) bodyEl.append(h("div", { className: "empty" }, h("b", { textContent: "Coming soon \u2661" }), "The first verified mod is on its way."));
+    if (market === null) { bodyEl.append(h("div", { className: "empty", textContent: "Loading" })); loadMarket(); return; }
+    if (marketErr) bodyEl.append(h("div", { className: "empty bad", textContent: marketErr }));
+    else if (!market.length) { bodyEl.append(h("div", { className: "empty", textContent: "No verified mods yet. The first one is coming soon." })); return; }
+    const tb = h("tbody");
     market.forEach(it => {
-      const have = mods.find(x => x.id === it.id), btn = h("button", { className: "btn pri go", textContent: have ? (have.version !== it.version ? "Update" : "Reinstall") : "Install" });
+      const have = mods.find(x => x.id === it.id), btn = h("button", { className: "btn pri", textContent: have ? (have.version !== it.version ? "Update" : "Reinstall") : "Install" });
       btn.onclick = () => installFromMarket(it, btn);
-      bodyEl.append(h("div", { className: "mk" }, h("span", { className: "ribbon", textContent: "\u2713 Verified" }),
-        h("div", { className: "ico", textContent: it.icon || (it.name || "?").trim().charAt(0).toUpperCase() }),
-        h("div", { className: "info" }, h("div", { className: "nm" }, h("span", { textContent: it.name }), h("span", { className: "ver", textContent: "v" + it.version })), h("div", { className: "meta", textContent: "by " + it.author }), it.description ? h("div", { className: "desc", textContent: it.description }) : null),
-        btn));
+      tb.append(h("tr", null, h("td", null, it.name, h("span", { className: "ok", textContent: " (verified)" }), it.description ? h("div", { className: "mut", textContent: it.description }) : null), h("td", { className: "mut", textContent: it.version }), h("td", { className: "mut", textContent: it.author }), h("td", null, btn)));
     });
+    bodyEl.append(h("table", { style: "margin-top:8px" }, h("thead", null, h("tr", null, h("th", { textContent: "Name" }), h("th", { textContent: "Version" }), h("th", { textContent: "Author" }), h("th"))), tb));
   }
 
   function setDraft(code, source) { draft = { code, source }; render(); }
@@ -295,7 +277,7 @@
     bodyEl.append(h("div", { className: "warn", textContent: "Mods run with full access to this page. Only add mods from people you trust. Mods from the Marketplace are the only ones FemDash verifies." }));
     const file = h("input", { type: "file", accept: ".js,text/javascript", style: "display:none" });
     file.onchange = async () => { if (file.files[0]) setDraft(await file.files[0].text(), "local"); };
-    const dz = h("div", { className: "dz" }, h("div", { className: "dzi", textContent: "\u2b06" }), h("div", { className: "dzt", textContent: "Drop a .js mod here" }), h("div", { className: "dzs", textContent: "or click to choose a file" }));
+    const dz = h("div", { className: "dz", textContent: "Drop a .js file here, or click to choose" });
     dz.onclick = () => file.click();
     ["dragenter", "dragover"].forEach(t => dz.addEventListener(t, e => { e.preventDefault(); dz.classList.add("hot"); }));
     ["dragleave", "drop"].forEach(t => dz.addEventListener(t, e => { e.preventDefault(); dz.classList.remove("hot"); }));
@@ -303,18 +285,16 @@
     bodyEl.append(dz, file);
     if (draft) {
       const meta = parseHeader(draft.code), ok = meta && ID_RE.test(meta.id || "");
-      bodyEl.append(h("div", { className: "mc" },
-        h("div", { className: "ico", textContent: ok ? ((meta.icon || meta.name || meta.id).trim().slice(0, 2).toUpperCase()) : "!" }),
-        h("div", { className: "info" },
-          ok ? [h("div", { className: "nm" }, h("span", { textContent: meta.name || meta.id }), h("span", { className: "ver", textContent: "v" + (meta.version || "?") })), h("div", { className: "meta", textContent: "by " + (meta.author || "unknown") + " \u2022 id: " + meta.id }), meta.description ? h("div", { className: "desc", textContent: meta.description }) : null]
-            : [h("div", { className: "nm", textContent: "This doesn't look like a FemDash mod" }), h("div", { className: "errs", textContent: "Missing or invalid header. It must start with // ==FemDashMod== and include a valid // @id line. See MODDING.md." })],
-          h("div", { className: "acts row2" }, h("button", { className: "btn pri", textContent: "Install", disabled: !ok, onclick: commitDraft }), h("button", { className: "btn", textContent: "Clear", onclick: () => { draft = null; render(); } })))));
+      bodyEl.append(h("div", { className: "det", style: "margin-top:0" },
+        ok ? [h("div", null, h("b", { textContent: meta.name || meta.id }), " " + (meta.version || "?") + " by " + (meta.author || "unknown")), h("div", { className: "mut", textContent: "id: " + meta.id }), meta.description ? h("div", { className: "mut", textContent: meta.description }) : null]
+          : [h("div", null, h("b", { textContent: "This doesn't look like a FemDash mod" })), h("div", { className: "bad" }, h("code", { textContent: "Missing or invalid header. It must start with // ==FemDashMod== and include a valid // @id line. See MODDING.md." }))],
+        h("div", { className: "acts" }, h("button", { className: "btn pri", textContent: "Install", disabled: !ok, onclick: commitDraft }), h("button", { className: "btn", textContent: "Clear", onclick: () => { draft = null; render(); } }))));
     }
-    const ta = h("textarea", { placeholder: "Paste a mod here...", spellcheck: false });
+    const ta = h("textarea", { placeholder: "Paste a mod here", spellcheck: false });
     const url = h("input", { type: "text", placeholder: "https://... link to a .js mod" });
     bodyEl.append(h("details", null, h("summary", { textContent: "Paste code or use a link" }), ta,
       h("div", { className: "row2" }, h("button", { className: "btn", textContent: "Use pasted code", onclick: () => { if (ta.value.trim()) setDraft(ta.value, "local"); } })),
-      h("div", { className: "note", style: "margin-top:12px", textContent: "From a link:" }), url,
+      h("div", { className: "mut", style: "margin-top:12px", textContent: "From a link:" }), h("div", { style: "margin-top:4px" }, url),
       h("div", { className: "row2" }, h("button", {
         className: "btn", textContent: "Fetch from link", onclick: async () => {
           try { const r = await fetch(url.value.trim()); if (!r.ok) throw new Error("HTTP " + r.status); setDraft(await r.text(), "url"); }
